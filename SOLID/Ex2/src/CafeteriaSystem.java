@@ -1,42 +1,71 @@
 import java.util.*;
 
 public class CafeteriaSystem {
-    private final Map<String, MenuItem> menu = new LinkedHashMap<>();
-    private final FileStore store = new FileStore();
-    private int invoiceSeq = 1000;
 
-    public void addToMenu(MenuItem i) { menu.put(i.id, i); }
+    // MENU STORAGE
+    private final Map<String, MenuItem> menu =
+            new HashMap<>();
 
-    // Intentionally SRP-violating: menu mgmt + tax + discount + format + persistence.
-    public void checkout(String customerType, List<OrderLine> lines) {
-        String invId = "INV-" + (++invoiceSeq);
-        StringBuilder out = new StringBuilder();
-        out.append("Invoice# ").append(invId).append("\n");
+    private final PricingService pricingService =
+            new PricingService();
 
-        double subtotal = 0.0;
-        for (OrderLine l : lines) {
-            MenuItem item = menu.get(l.itemId);
-            double lineTotal = item.price * l.qty;
-            subtotal += lineTotal;
-            out.append(String.format("- %s x%d = %.2f\n", item.name, l.qty, lineTotal));
-        }
+    private final TaxPolicy taxPolicy =
+            new FivePercentTax();
 
-        double taxPct = TaxRules.taxPercent(customerType);
-        double tax = subtotal * (taxPct / 100.0);
+    private final DiscountPolicy discountPolicy =
+            new FlatDiscount();
 
-        double discount = DiscountRules.discountAmount(customerType, subtotal, lines.size());
+    private final InvoiceFormatter formatter =
+            new InvoiceFormatter();
 
-        double total = subtotal + tax - discount;
+    private final InvoiceRepository repository =
+            new InMemoryInvoiceRepository();
 
-        out.append(String.format("Subtotal: %.2f\n", subtotal));
-        out.append(String.format("Tax(%.0f%%): %.2f\n", taxPct, tax));
-        out.append(String.format("Discount: -%.2f\n", discount));
-        out.append(String.format("TOTAL: %.2f\n", total));
+    // ADD MENU ITEM
+    public void addToMenu(MenuItem item) {
+        menu.put(item.id, item);
+    }
 
-        String printable = InvoiceFormatter.identityFormat(out.toString());
-        System.out.print(printable);
+    // CHECKOUT (matches Main)
+    public void checkout(String customerType,
+                         List<OrderLine> lines) {
 
-        store.save(invId, printable);
-        System.out.println("Saved invoice: " + invId + " (lines=" + store.countLines(invId) + ")");
+        String invoiceNo = "INV-1001";
+
+        // Subtotal
+        double subtotal =
+            pricingService.calculateSubtotal(
+                lines, menu);
+
+        // Tax
+        double tax =
+            taxPolicy.computeTax(subtotal);
+
+        // Discount
+        double discount =
+            discountPolicy.computeDiscount(subtotal);
+
+        // Total
+        double total =
+            subtotal + tax - discount;
+
+        // Format invoice
+        String invoiceText =
+            formatter.format(
+                invoiceNo,
+                lines,
+                menu,
+                subtotal,
+                taxPolicy,
+                tax,
+                discount,
+                total
+            );
+
+        // Print
+        System.out.print(invoiceText);
+
+        //  Save
+        repository.save(invoiceNo, invoiceText);
     }
 }
