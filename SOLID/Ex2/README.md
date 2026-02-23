@@ -59,3 +59,4 @@ Saved invoice: INV-1001 (lines=7)
 
 ## 10. Stretch goals
 - Add a second invoice for a staff member with different discount policy.
+ 
